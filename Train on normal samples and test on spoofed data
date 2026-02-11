@@ -1,0 +1,192 @@
+
+# train on normal samples, plot, use trained model on spoofed data
+
+
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+import tensorflow as tf
+from sklearn.preprocessing import StandardScaler
+from tensorflow.keras.models import Model
+from tensorflow.keras.layers import Input, LSTM, RepeatVector, TimeDistributed, Dense
+from tensorflow.keras.optimizers import Adam
+
+
+
+TIMESTEPS = 20
+BATCH_SIZE = 64
+SPOOF_START_FRAC = 0.40
+SPOOF_END_FRAC   = 0.70
+SPOOF_DRIFT      = 1e-4
+
+
+seed = 42
+np.random.seed(seed)
+tf.random.set_seed(seed)
+
+# 
+#  LOAD & CLEAN DATA (ONCE)
+
+
+df = pd.read_csv(file, low_memory=False)
+
+lat_c = find_col(df, ["lat"])
+lon_c = find_col(df, ["lon"])
+vx_c  = find_col(df, ["vx", "velx"])
+vy_c  = find_col(df, ["vy", "vely"])
+
+df[lat_c] = to_num(df[lat_c])
+df[lon_c] = to_num(df[lon_c])
+
+df = df.dropna(subset=[lat_c, lon_c]).reset_index(drop=True)
+
+# Remove takeoff & landing
+df = df.iloc[int(0.15*len(df)):int(0.85*len(df))].reset_index(drop=True)
+
+if vx_c and vy_c:
+    vx = to_num(df[vx_c]).fillna(0).values
+    vy = to_num(df[vy_c]).fillna(0).values
+    imu_mag = np.sqrt(vx**2 + vy**2)
+else:
+    imu_mag = np.zeros(len(df))
+
+#clean features
+
+gps_steps_clean = haversine_steps(df[lat_c], df[lon_c])
+dt_clean = compute_dt(df)
+
+X_clean = feature_vector(gps_steps_clean, imu_mag, dt_clean)
+# scale and build sequences
+
+scaler = StandardScaler()
+X_clean_n = scaler.fit_transform(X_clean)
+
+def build_sequences(X, T):
+    return np.array([X[i:i+T] for i in range(len(X)-T)])
+
+X_clean_seq = build_sequences(X_clean_n, TIMESTEPS)
+
+# BUILD MODEL
+
+
+tf.keras.backend.clear_session()
+
+inp = Input(shape=(TIMESTEPS, X_clean_seq.shape[2]))
+
+encoded = LSTM(64, return_sequences=True)(inp)
+encoded = LSTM(32)(encoded)
+
+decoded = RepeatVector(TIMESTEPS)(encoded)
+decoded = LSTM(64, return_sequences=True)(decoded)
+decoded = TimeDistributed(Dense(X_clean_seq.shape[2]))(decoded)
+
+autoencoder = Model(inp, decoded)
+autoencoder.compile(optimizer=Adam(1e-3), loss="mse")
+
+
+# TRAIN ON CLEAN
+
+autoencoder.fit(
+    X_clean_seq,
+    X_clean_seq,
+    epochs=30,
+    batch_size=BATCH_SIZE,
+    validation_split=0.1,
+    shuffle=True,
+    verbose=1
+)
+
+
+# TEST ON CLEAN
+
+
+X_pred_clean = autoencoder.predict(X_clean_seq)
+recon_clean = np.mean((X_clean_seq - X_pred_clean)**2, axis=(1,2))
+
+# plt.figure(figsize=(12,4))
+# plt.plot(recon_clean, color="black", lw=1)
+# plt.ylim(ymin, ymax)
+# plt.title("Reconstruction Error - Clean Flight")
+# plt.xlabel("Window index")
+# plt.grid(alpha=0.3)
+# plt.tight_layout()
+# plt.savefig("/content/error1.png", dpi=300, bbox_inches="tight")
+# plt.show()
+
+# print("Clean mean:", recon_clean.mean())
+# print("Clean std :", recon_clean.std())
+
+
+#  CREATE SPOOF (SAME DF)
+
+
+df_spoof = df.copy()
+
+n = len(df_spoof)
+s = int(SPOOF_START_FRAC * n)
+e = int(SPOOF_END_FRAC * n)
+
+noise = np.cumsum(np.random.normal(0, SPOOF_DRIFT/20, e-s))
+df_spoof.loc[s:e-1, lat_c] += noise
+df_spoof.loc[s:e-1, lon_c] += noise
+
+
+# SPOOF FEATURES
+
+
+gps_steps_spoof = haversine_steps(df_spoof[lat_c], df_spoof[lon_c])
+dt_spoof = compute_dt(df_spoof)
+
+X_spoof = feature_vector(gps_steps_spoof, imu_mag, dt_spoof)
+
+
+X_spoof_n = scaler.transform(X_spoof)
+X_spoof_seq = build_sequences(X_spoof_n, TIMESTEPS)
+
+
+# TEST TRAINED MODEL ON SPOOF
+
+
+X_pred_spoof = autoencoder.predict(X_spoof_seq)
+recon_spoof = np.mean((X_spoof_seq - X_pred_spoof)**2, axis=(1,2))
+
+ymin = min(recon_clean.min(), recon_spoof.min())
+ymax = max(recon_clean.max(), recon_spoof.max())
+# PLOT CLean 
+plt.figure(figsize=(12,4))
+plt.plot(recon_clean, color="black", lw=1)
+# plt.ylim(ymin, ymax)
+
+plt.xlabel("Window index")
+plt.grid(alpha=0.3)
+plt.tight_layout()
+plt.savefig("/content/error1.png", dpi=300, bbox_inches="tight")
+plt.show()
+
+print("Clean mean:", recon_clean.mean())
+print("Clean std :", recon_clean.std())
+
+#  PLOT SPOOF RESULT
+
+
+plt.figure(figsize=(12,5))
+plt.plot(recon_spoof[:e-TIMESTEPS], color="black", label="Reconstruction error")
+# plt.ylim(ymin, ymax)
+plt.axvspan(
+    s-TIMESTEPS,
+    e-TIMESTEPS,
+    facecolor="none",
+    edgecolor="red",
+    hatch="///",
+    linewidth=0,
+    label="Spoofed region"
+)
+
+
+plt.xlabel("Window index")
+plt.legend()
+plt.grid(alpha=0.3)
+plt.tight_layout()
+plt.savefig("/content/error2.png", dpi=300, bbox_inches="tight")
+plt.show()
+
