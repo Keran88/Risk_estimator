@@ -150,43 +150,9 @@ X_spoof_seq = build_sequences(X_spoof_n, TIMESTEPS)
 X_pred_spoof = autoencoder.predict(X_spoof_seq)
 recon_spoof = np.mean((X_spoof_seq - X_pred_spoof)**2, axis=(1,2))
 
-ymin = min(recon_clean.min(), recon_spoof.min())
-ymax = max(recon_clean.max(), recon_spoof.max())
-# PLOT CLean 
-plt.figure(figsize=(12,4))
-plt.plot(recon_clean, color="black", lw=1)
-# plt.ylim(ymin, ymax)
-
-plt.xlabel("Window index")
-plt.grid(alpha=0.3)
-plt.tight_layout()
-plt.savefig("/content/error1.png", dpi=300, bbox_inches="tight")
-plt.show()
-
-print("Clean mean:", recon_clean.mean())
-print("Clean std :", recon_clean.std())
-
-#  PLOT SPOOF RESULT
 
 
-plt.figure(figsize=(12,5))
-plt.plot(recon_spoof[:e-TIMESTEPS], color="black", label="Reconstruction error")
-# plt.ylim(ymin, ymax)
-plt.axvspan(
-    s-TIMESTEPS,
-    e-TIMESTEPS,
-    facecolor="none",
-    edgecolor="red",
-    hatch="///",
-    linewidth=0,
-    label="Spoofed region"
-)
 
 
-plt.xlabel("Window index")
-plt.legend()
-plt.grid(alpha=0.3)
-plt.tight_layout()
-plt.savefig("/content/error2.png", dpi=300, bbox_inches="tight")
-plt.show()
+
 
