@@ -1,0 +1,144 @@
+import os, glob
+import numpy as np
+import pandas as pd
+from sklearn.mixture import GaussianMixture
+from sklearn.preprocessing import StandardScaler
+from scipy.signal import medfilt
+import matplotlib.pyplot as plt
+from tensorflow.keras.models import Model
+from tensorflow.keras.layers import Input, LSTM, RepeatVector, TimeDistributed, Dense
+from tensorflow.keras.optimizers import Adam
+from pathlib import Path
+
+
+from google.colab import drive
+drive.mount("/content/drive")
+ROOT_DIR = "/content/drive/MyDrive/Phantom4_001_csv"
+# ROOT_DIR = r"C:\Users\s223175273\OneDrive - Deakin University (1)\PhD Related\Original Dataset\Phantom4_001_csv"
+FILE_GLOB = "**/FLY*.csv"
+
+N_FLIGHTS = 3
+MIN_LEN = 200
+SPOOF_START_FRAC = 0.40
+SPOOF_END_FRAC   = 0.70
+SPOOF_DRIFT      = 1e-4 # long,lat
+SPEED_BIAS       = 1.25 # for velocity
+
+
+
+def find_col(df, keys):
+    for c in df.columns:
+        for k in keys:
+            if k.lower() in c.lower():
+                return c
+    return None
+def to_num(x):
+    return pd.to_numeric(x, errors="coerce")
+def haversine_steps(lat, lon):
+    R = 6371000.0 # in meters
+    lat = np.radians(lat) # degree to rad
+    lon = np.radians(lon)
+    dlat = np.diff(lat, prepend=lat[0])
+    dlon = np.diff(lon, prepend=lon[0])
+    a = np.sin(dlat/2)**2 + np.cos(lat)*np.cos(lat-dlat)*np.sin(dlon/2)**2 # distance in meters
+    d = 2 * R * np.arcsin(np.sqrt(a))
+    d[0] = 0
+    return d
+def compute_dt(df): # time differences between samples based on internal clock
+    tcol = find_col(df, ["time", "tick", "timestamp"])
+    # if tcol is None:
+    #     return np.ones(len(df))
+    t = to_num(df[tcol]).values * 1e-6 # microseconds to seconds
+    dt = np.diff(t, prepend=t[0])
+    dt[dt <= 0] = np.nan
+    return pd.Series(dt).ffill().fillna(np.nanmedian(dt)).values
+def feature_vector(gps_steps, imu_mag, dt, W=12):
+    gps_speed = gps_steps / dt
+    #clean
+    gps_speed = np.clip(gps_speed, 0, np.nanpercentile(gps_speed, 99)) #clip(x,low,high)
+    gps_speed = medfilt(gps_speed, 5)
+    #
+    speed_ratio = gps_speed / (imu_mag + 1e-3) # gps with imu
+    roll_std = pd.Series(speed_ratio).rolling(W, center=True).std().fillna(0) # compute std for each window
+    accel = np.abs(np.diff(gps_speed, prepend=gps_speed[0])) # acc = |speed[t] - speed[t-1]|
+    return np.column_stack([
+        # np.log1p(gps_speed),
+        gps_speed,
+        speed_ratio,
+        roll_std,
+        accel
+    ])
+############################################################################## LOADING
+files = sorted(glob.glob(os.path.join(ROOT_DIR, FILE_GLOB), recursive=True))
+
+X_all, y_all, spans = [], [], []
+used = 0
+offset = 0
+
+for file in files:
+    if used >= N_FLIGHTS:  # 3 FILES
+        break
+
+    df0 = pd.read_csv(file, low_memory=False)
+
+    lat_c = find_col(df0, ["lat"])
+    lon_c = find_col(df0, ["lon"])
+    # lat_c = find_col(df0, ["GPS:Lat"])
+    # lon_c = find_col(df0, ["GPS:Long"])
+    print(lat_c)
+    vx_c  = find_col(df0, ["vx", "velx"])
+    vy_c  = find_col(df0, ["vy", "vely"])
+    print(vx_c)
+
+    if lat_c is None or lon_c is None:
+        continue
+
+    df = df0.copy()
+    df[lat_c] = to_num(df[lat_c])
+    df[lon_c] = to_num(df[lon_c])
+    df = df.dropna(subset=[lat_c, lon_c]).reset_index(drop=True)
+
+    if len(df) < MIN_LEN:
+        continue
+ ############################################################################### INJECT SPOOFING in df
+    df = df.iloc[int(0.15*len(df)):int(0.85*len(df))].reset_index(drop=True)
+
+    n = len(df)
+    s = int(SPOOF_START_FRAC * n)
+    e = int(SPOOF_END_FRAC   * n)
+
+
+    noise = np.cumsum(np.random.normal(0, SPOOF_DRIFT/20, e - s))
+    df.loc[s:e-1, lat_c] += noise
+    df.loc[s:e-1, lon_c] += noise
+
+    gps_steps = haversine_steps(df[lat_c], df[lon_c])
+    gps_steps[s:e] *= SPEED_BIAS
+    dt = compute_dt(df)
+
+    if vx_c and vy_c:
+        vx = to_num(df[vx_c]).fillna(0).values
+        vy = to_num(df[vy_c]).fillna(0).values
+        imu_mag = np.sqrt(vx**2 + vy**2)
+    else:
+        imu_mag = np.zeros(n)
+
+    feats = feature_vector(gps_steps, imu_mag, dt)
+########################################################################### X_all creation
+    X_all.append(feats)
+    print(f"Used file #{used+1}: {os.path.basename(file)} | length={n}")
+    # X_all=[ feat_flight1, feats_flight2, feats_flight3]   X_all is a list that contains slected features of all logs
+
+    y = np.zeros(n) # 0 means clean 1 means spoofed
+    y[s:e] = 1  #  not used as input to model
+    y_all.append(y)    # y_all=[y_flight1, y_flight2, y_flight3]
+
+    spans.append((offset + s, offset + e))
+    offset += n
+    used += 1
+
+
+X = np.vstack(X_all)  # vertically stack all log's features row wise so [stacked rows 6000 * 4 feature col]
+y = np.concatenate(y_all) # y.shape = (6000,) rows
+
+
