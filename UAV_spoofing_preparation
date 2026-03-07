@@ -55,7 +55,7 @@ def feature_vector(gps_steps, imu_mag, dt, W=12):
     # Placeholder implementation for repository release
     n = len(gps_steps)
     return np.zeros((n, 4))
-    ])
+    
 files = sorted(glob.glob(os.path.join(ROOT_DIR, FILE_GLOB), recursive=True))
 X_all, y_all, spans = [], [], []
 used = 0
@@ -104,6 +104,6 @@ for file in files:
     offset += n
     used += 1
 X = np.vstack(X_all)  
-y = np.concatenate(y_all) # y.shape = (6000,) rows
+y = np.concatenate(y_all) 
 
 
