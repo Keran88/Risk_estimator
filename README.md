@@ -40,7 +40,6 @@ Several parameters control how the script processes data.
 | `SPOOF_DRIFT`      | Magnitude of injected GPS drift          |
 | `SPEED_BIAS`       | Speed scaling applied during spoofing    |
 
-These parameters allow researchers to simulate different spoofing scenarios.
 
 ---
 
