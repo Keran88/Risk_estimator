@@ -46,20 +46,8 @@ def compute_dt(df): # time differences between samples based on internal clock
     dt[dt <= 0] = np.nan
     return pd.Series(dt).ffill().fillna(np.nanmedian(dt)).values
 def feature_vector(gps_steps, imu_mag, dt, W=12):
-    gps_speed = gps_steps / dt
-    #clean
-    gps_speed = np.clip(gps_speed, 0, np.nanpercentile(gps_speed, 99)) 
-    gps_speed = medfilt(gps_speed, 5)
-    #
-    speed_ratio = gps_speed / (imu_mag + 1e-3) 
-    roll_std = pd.Series(speed_ratio).rolling(W, center=True).std().fillna(0) 
-    accel = np.abs(np.diff(gps_speed, prepend=gps_speed[0]))|
-    return np.column_stack([
-        # np.log1p(gps_speed),
-        gps_speed,
-        speed_ratio,
-        roll_std,
-        accel
+    # feature calculation
+    # the body is intentionally left blank
     ])
 files = sorted(glob.glob(os.path.join(ROOT_DIR, FILE_GLOB), recursive=True))
 X_all, y_all, spans = [], [], []
