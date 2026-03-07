@@ -12,9 +12,6 @@ The released code focuses on the **spoofing simulation and data processing pipel
 ---
 
 # Overview
-
-UAV navigation systems rely heavily on **Global Navigation Satellite Systems (GNSS)** such as GPS. These signals are vulnerable to **spoofing attacks**, where a malicious transmitter broadcasts counterfeit navigation signals that can mislead the UAV about its true location.
-
 To study and evaluate spoofing detection techniques, this script performs the following tasks:
 
 1. Load UAV flight logs from CSV files
@@ -93,7 +90,6 @@ Current limitations include:
 
 * Only GPS coordinates are manipulated
 * Other onboard sensors are assumed to remain unaffected
-* Satellite-level spoofing behavior is not simulated
 * Environmental effects such as multipath interference are not modeled
 
 Future work may incorporate more realistic spoofing scenarios and additional sensor models.
