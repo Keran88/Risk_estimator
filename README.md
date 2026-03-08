@@ -113,7 +113,6 @@ Limitations include:
 * Other sensors are assumed to remain unaffected
 * Environmental effects such as multipath interference are not simulated
 
-Future work may incorporate more advanced spoofing scenarios and multi-sensor manipulation models.
 
 ---
 
