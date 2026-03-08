@@ -3,115 +3,63 @@ import glob
 import numpy as np
 import pandas as pd
 from google.colab import drive
-
-# Mount Google Drive (for Colab use)
 drive.mount("/content/drive")
-
-# Dataset directory
 ROOT_DIR = "/content/drive/MyDrive/Phantom4_001_csv"
 FILE_GLOB = "**/FLY*.csv"
-
-# Configuration
 N_FLIGHTS = 10
 MIN_LEN = 200
-
 SPOOF_START_FRAC = 0.40
 SPOOF_END_FRAC   = 0.70
 SPOOF_DRIFT      = 1e-4
 SPEED_BIAS       = 1.25
-
-# Reproducibility
 np.random.seed(42)
-
-
 def find_col(df, keys):
-    """Find a column containing one of the given keywords."""
     for c in df.columns:
         for k in keys:
             if k.lower() in c.lower():
                 return c
     return None
-
-
 def to_num(x):
-    """Convert column to numeric values."""
     return pd.to_numeric(x, errors="coerce")
-
-
 def haversine_steps(lat, lon):
-    """
-    Compute displacement between consecutive GPS coordinates
-    using the Haversine formula.
-    """
     R = 6371000.0  # Earth radius (meters)
-
     lat = np.radians(lat)
     lon = np.radians(lon)
-
     dlat = np.diff(lat, prepend=lat[0])
     dlon = np.diff(lon, prepend=lon[0])
-
     a = np.sin(dlat/2)**2 + np.cos(lat) * np.cos(lat-dlat) * np.sin(dlon/2)**2
     d = 2 * R * np.arcsin(np.sqrt(a))
-
     d[0] = 0
     return d
-
-
-# Locate flight logs
 files = sorted(glob.glob(os.path.join(ROOT_DIR, FILE_GLOB), recursive=True))
-
 used = 0
 spoofed_flights = []
-
 for file in files:
-
     if used >= N_FLIGHTS:
         break
-
     df0 = pd.read_csv(file, low_memory=False)
-
     lat_c = find_col(df0, ["lat"])
     lon_c = find_col(df0, ["lon"])
-
     if lat_c is None or lon_c is None:
         continue
-
     print(f"Processing: {os.path.basename(file)}")
-
     df = df0.copy()
-
     df[lat_c] = to_num(df[lat_c])
     df[lon_c] = to_num(df[lon_c])
-
     df = df.dropna(subset=[lat_c, lon_c]).reset_index(drop=True)
-
     if len(df) < MIN_LEN:
         continue
-
-    # Remove unstable flight segments (takeoff/landing)
     df = df.iloc[int(0.15 * len(df)): int(0.85 * len(df))].reset_index(drop=True)
-
     n = len(df)
-
-    # Define spoofing interval
     s = int(SPOOF_START_FRAC * n)
     e = int(SPOOF_END_FRAC * n)
-
-    # Inject gradual GPS drift
     noise = np.cumsum(np.random.normal(0, SPOOF_DRIFT / 20, e - s))
-
     df.loc[s:e-1, lat_c] += noise
     df.loc[s:e-1, lon_c] += noise
-
-    # Modify displacement to simulate abnormal motion
     gps_steps = haversine_steps(df[lat_c], df[lon_c])
     gps_steps[s:e] *= SPEED_BIAS
-
-    # Optional spoofing labels
     labels = np.zeros(n)
     labels[s:e] = 1
-
     spoofed_flights.append({
         "file": os.path.basename(file),
         "data": df,
