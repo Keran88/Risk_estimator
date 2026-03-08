@@ -1,37 +1,39 @@
-# UAV GPS Spoofing Simulation and Data Preparation
+# UAV GPS Spoofing Simulation
 
-This repository contains a **data preprocessing module** used in research on **GPS spoofing detection in Unmanned Aerial Vehicles (UAVs)**.
+This repository provides a **GPS spoofing simulation module for UAV flight logs**.
+The script loads UAV telemetry data and injects simulated GPS spoofing into the recorded trajectory in order to study the effects of spoofing attacks.
 
-The script loads UAV flight logs, injects simulated GPS spoofing into the telemetry data, and prepares the processed data for downstream analysis and machine learning experiments.
+The code focuses **only on spoofing simulation** and does not include the full data processing or feature extraction pipeline used in the associated research.
 
-This code is **not a complete detection system**, but rather a **data preparation component** used within a larger research framework.
+This repository is intended to illustrate **how spoofing scenarios are generated from real UAV flight logs** for experimentation and evaluation.
 
-The **feature extraction implementation used in the experiments is intentionally not included** in this public repository.
-The released code focuses on the **spoofing simulation and data processing pipeline** used to generate datasets for experimentation.
+The output can be used to analyze how spoofing alters UAV trajectories or to generate datasets for further research.
 
 ---
 
-# Overview
-To study and evaluate spoofing detection techniques, this script performs the following tasks:
+# Spoofing Model
 
-1. Load UAV flight logs from CSV files
-2. Identify relevant telemetry columns (GPS coordinates, velocity, timestamps)
-3. Clean and preprocess the telemetry data
-4. Inject simulated GPS spoofing attacks into the trajectory
-5. Generate labeled datasets indicating spoofed segments *(optional, used for evaluation)*
+Spoofing is simulated by introducing **gradual drift in GPS coordinates** during a selected portion of the flight.
 
-The processed data can then be used for:
+The spoofing interval is defined by two parameters:
 
-* anomaly detection models
-* sensor consistency analysis
-* machine learning experiments
-* cybersecurity research on UAV navigation systems
+* `SPOOF_START_FRAC`
+* `SPOOF_END_FRAC`
+
+These parameters represent the fraction of the flight where spoofing begins and ends.
+
+During this interval:
+
+1. Random drift is gradually added to the latitude and longitude values.
+2. GPS displacement is modified to simulate abnormal motion.
+
+This creates a **spoofed trajectory that slowly deviates from the original path**, mimicking realistic spoofing scenarios where the UAV is gradually pulled away from its true location.
 
 ---
 
 # Configuration Parameters
 
-Several parameters control how the script processes the dataset and injects spoofing.
+The spoofing simulation can be controlled using the following parameters.
 
 | Parameter          | Description                              |
 | ------------------ | ---------------------------------------- |
@@ -42,19 +44,41 @@ Several parameters control how the script processes the dataset and injects spoo
 | `SPOOF_DRIFT`      | Magnitude of injected GPS drift          |
 | `SPEED_BIAS`       | Speed scaling applied during spoofing    |
 
-These parameters allow researchers to simulate different spoofing scenarios and evaluate detection algorithms under controlled conditions.
+Adjusting these parameters allows researchers to simulate different spoofing conditions.
+
+---
+
+# Input Data
+
+The script expects **UAV flight logs stored in CSV format**.
+
+Example directory structure:
+
+```
+Phantom4_001_csv/
+    flight1/FLY001.csv
+    flight2/FLY002.csv
+```
+
+The script automatically searches for files using:
+
+```
+**/FLY*.csv
+```
+
+This allows flight logs to be located within nested folders.
 
 ---
 
 # Dependencies
 
-The script relies on the following Python libraries:
+The script uses the following Python libraries:
 
 ```
 numpy
 pandas
-scikit-learn
 scipy
+scikit-learn
 matplotlib
 tensorflow
 ```
@@ -63,49 +87,47 @@ tensorflow
 
 # Running the Script
 
-The script is designed to run in **Google Colab**, with UAV flight logs stored in **Google Drive**.
+The code is designed to run in **Google Colab** with flight logs stored in **Google Drive**.
 
 Typical workflow:
 
-1. Upload the UAV flight log dataset to Google Drive
+1. Upload UAV flight logs to Google Drive
 2. Mount Google Drive in the Colab environment
-3. Set the dataset directory path
-4. Run the preprocessing script
+3. Set the dataset path in the script
+4. Run the spoofing simulation
 
-The script will automatically search for flight logs matching:
+Example dataset path:
 
 ```
-**/FLY*.csv
+/content/drive/MyDrive/Phantom4_001_csv
 ```
-
-and process the selected files.
 
 ---
 
 # Limitations
 
-The spoofing model implemented in this repository is simplified and intended for experimental research purposes.
+The spoofing simulation implemented in this repository is simplified and intended for experimental analysis.
 
-Current limitations include:
+Limitations include:
 
 * Only GPS coordinates are manipulated
-* Other onboard sensors are assumed to remain unaffected
-* Environmental effects such as multipath interference are not modeled
+* Other sensors are assumed to remain unaffected
+* Environmental effects such as multipath interference are not simulated
 
-Future work may incorporate more realistic spoofing scenarios and additional sensor models.
+Future work may incorporate more advanced spoofing scenarios and multi-sensor manipulation models.
 
 ---
 
 # Research Context
 
-This code is part of ongoing research in the areas of:
+This code is part of ongoing research related to:
 
 * UAV cybersecurity
-* GNSS spoofing detection
-* sensor consistency analysis
-* machine learning for anomaly detection
+* GNSS spoofing analysis
+* navigation system robustness
+* sensor anomaly detection
 
-The preprocessing pipeline prepares telemetry data for experiments designed to evaluate spoofing detection methods.
+The repository provides a **basic spoofing simulation tool** for generating controlled attack scenarios using real UAV telemetry data.
 
 ---
 
