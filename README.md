@@ -44,7 +44,6 @@ The spoofing simulation can be controlled using the following parameters.
 | `SPOOF_DRIFT`      | Magnitude of injected GPS drift          |
 | `SPEED_BIAS`       | Speed scaling applied during spoofing    |
 
-Adjusting these parameters allows researchers to simulate different spoofing conditions.
 
 ---
 
